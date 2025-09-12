@@ -1,0 +1,44 @@
+.container {
+  max-width: 720px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+.new-item {
+  margin: 1rem 0 2rem;
+}
+
+.row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.row input,
+.row textarea {
+  flex: 1;
+  padding: 0.5rem;
+  font-size: 1rem;
+}
+
+.list {
+  list-style: none;
+  padding: 0;
+}
+
+.card {
+  border: 1px solid #ddd;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+  background: #10bb49;
+}
+
+.card h3 {
+  margin: 0;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
