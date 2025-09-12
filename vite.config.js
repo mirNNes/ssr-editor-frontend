@@ -1,8 +1,16 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
 
-// https://vite.dev/config/
-export default defineConfig({
+// Production path for GitHub Pages and dev path for local.
+
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
-  base: '/ssr-editor-frontend/'
-})
+  base: mode === "production" ? "/ssr-editor-frontend/" : "/",
+
+  server: {
+    port: 5174,
+    proxy: {
+      "/api": "http://localhost:3001",
+    },
+  },
+}));
