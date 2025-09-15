@@ -23,6 +23,8 @@ jobs:
 
       - name: Build project
         run: npm run build
+        env:
+          VITE_API_URL: https://mimr24-rosa24-editor-cpekgyf2fwh7e9dx.swedencentral-01.azurewebsites.net
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
