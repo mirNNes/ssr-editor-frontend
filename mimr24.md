@@ -1,4 +1,4 @@
-# Akronym – Reflektioner
+# mimr24 – Reflektioner
 
 ### 1. Vad är din initiala upplevelse av dokument-orienterade databaser kontra relationsdatabaser?
 
@@ -37,4 +37,4 @@ Små projekt behöver inte alltid ett ramverk, och det är svårt att förstå i
 - Kan kännas jobbigt för små ändringar
 - Man måste komma ihåg att uppdatera brancher ofta
 - Kan bli konflikt om flera ändrar samma fil samtidigt
->4
+
