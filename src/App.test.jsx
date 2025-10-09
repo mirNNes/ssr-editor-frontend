@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import App from "./App";
 
 // API call mock
@@ -9,18 +9,29 @@ jest.mock("./api", () => ({
   deleteItem: jest.fn(),
 }));
 
-// Testa att rubriken renderas
-test("renderar rubriken", async () => {
-  render(<App />);
+jest.mock("./socket", () => ({
+  socket: {
+    on: jest.fn(),
+    emit: jest.fn(),
+    off: jest.fn(),
+  },
+}));
 
-  await waitFor(() => {
-    expect(screen.getByRole("heading", { name: /SSR/i })).toBeInTheDocument();
-  });
+beforeEach(() => {
+  localStorage.clear();
 });
 
-test("Skapa-knappen visas", async () => {
+// Testa att rubriken renderas
+test("renderar rubriken", () => {
   render(<App />);
-  await waitFor(() => {
-    expect(screen.getByRole("button", { name: /Skapa/i })).toBeInTheDocument();
-  });
+  expect(screen.getByRole("heading", { name: /SSR/i })).toBeInTheDocument();
+});
+
+test("visar login-formulär med tabbar och formulär", () => {
+  render(<App />);
+  expect(screen.getByPlaceholderText(/E-post/i)).toBeInTheDocument();
+  expect(screen.getByPlaceholderText(/Lösenord/i)).toBeInTheDocument();
+  const loginButtons = screen.getAllByRole("button", { name: /Logga in/i });
+  expect(loginButtons.length).toBeGreaterThanOrEqual(1);
+  expect(screen.getByRole("button", { name: /Registrera/i })).toBeInTheDocument();
 });
