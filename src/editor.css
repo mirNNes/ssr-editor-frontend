@@ -42,3 +42,173 @@
   gap: 0.5rem;
   margin-top: 0.5rem;
 }
+
+.comment-section {
+  margin-top: 1rem;
+  border-top: 1px solid #ccc;
+  padding-top: 0.75rem;
+}
+
+.comment-form textarea {
+  width: 100%;
+  margin: 0.25rem 0 0.5rem;
+  padding: 0.4rem;
+}
+
+.comment-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.comment-list.preview {
+  margin-top: 0.25rem;
+}
+
+.comment-item {
+  border: 1px solid #dcdcdc;
+  background: #f7f7f7;
+  padding: 0.5rem;
+  color: #111;
+}
+
+.comment-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: #333;
+}
+
+.comment-line {
+  font-weight: bold;
+}
+
+.comment-author {
+  color: #0a3d62;
+}
+
+.comment-date {
+  color: #333;
+}
+
+.comment-delete {
+  margin-top: 0.25rem;
+  background: #d9534f;
+  color: #fff;
+  border: none;
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+}
+
+.comment-empty {
+  font-style: italic;
+  color: #555;
+}
+
+.comment-preview {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  border: 1px solid #c8c8c8;
+  background: #f2f2f2;
+  color: #111;
+}
+
+.comment-preview strong {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.comment-add {
+  background: #0a3d62;
+  color: #fff;
+  border: none;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+  margin-bottom: 0.5rem;
+}
+
+.comment-form-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.comment-form-actions button {
+  border: none;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+}
+
+.auth-container {
+  max-width: 420px;
+}
+
+.auth-panel {
+  border: 1px solid #444;
+  padding: 1rem;
+  background: #1e1e1e;
+  border-radius: 4px;
+}
+
+.auth-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.auth-tabs button {
+  flex: 1;
+  padding: 0.4rem;
+  border: 1px solid #444;
+  background: #2c2c2c;
+  color: #fff;
+  cursor: pointer;
+}
+
+.auth-tabs button.active {
+  background: #0a3d62;
+  border-color: #0a3d62;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.auth-form input {
+  padding: 0.45rem;
+  border: 1px solid #444;
+  background: #121212;
+  color: #fff;
+}
+
+.auth-form button {
+  padding: 0.45rem;
+  border: none;
+  background: #0a3d62;
+  color: #fff;
+  cursor: pointer;
+}
+
+.auth-message {
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+}
+
+.user-info {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
