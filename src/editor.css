@@ -43,45 +43,6 @@
   margin-top: 0.5rem;
 }
 
-.editor-lines {
-  margin-top: 0.75rem;
-}
-
-.line-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  margin: 0.5rem 0;
-}
-
-.line-item {
-  display: flex;
-  gap: 0.5rem;
-  align-items: flex-start;
-  padding: 0.35rem 0.5rem;
-  border: 1px solid #d0d0d0;
-  background: #fff;
-  text-align: left;
-  cursor: pointer;
-}
-
-.line-item .line-number {
-  font-weight: bold;
-  color: #0a3d62;
-  min-width: 2rem;
-}
-
-.line-item.active {
-  border-color: #0a3d62;
-  box-shadow: 0 0 0 1px #0a3d62 inset;
-}
-
-.line-placeholder {
-  color: #545454;
-  font-style: italic;
-  margin: 0;
-}
-
 .comment-section {
   margin-top: 1rem;
   border-top: 1px solid #ccc;
@@ -94,12 +55,6 @@
   padding: 0.4rem;
 }
 
-.comment-hint {
-  font-style: italic;
-  color: #555;
-  margin: 0.25rem 0 0.75rem;
-}
-
 .comment-list {
   list-style: none;
   padding: 0;
@@ -109,10 +64,15 @@
   gap: 0.5rem;
 }
 
+.comment-list.preview {
+  margin-top: 0.25rem;
+}
+
 .comment-item {
   border: 1px solid #dcdcdc;
   background: #f7f7f7;
   padding: 0.5rem;
+  color: #111;
 }
 
 .comment-meta {
@@ -132,7 +92,7 @@
 }
 
 .comment-date {
-  color: #555;
+  color: #333;
 }
 
 .comment-delete {
@@ -147,6 +107,40 @@
 .comment-empty {
   font-style: italic;
   color: #555;
+}
+
+.comment-preview {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  border: 1px solid #c8c8c8;
+  background: #f2f2f2;
+  color: #111;
+}
+
+.comment-preview strong {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.comment-add {
+  background: #0a3d62;
+  color: #fff;
+  border: none;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+  margin-bottom: 0.5rem;
+}
+
+.comment-form-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.comment-form-actions button {
+  border: none;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
 }
 
 .auth-container {

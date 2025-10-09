@@ -25,12 +25,13 @@ function App() {
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [comments, setComments] = useState([]);
-  const [selectedLine, setSelectedLine] = useState(null);
+  const [commentNumber, setCommentNumber] = useState(null);
   const [newComment, setNewComment] = useState("");
   const [authMode, setAuthMode] = useState("login");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authMessage, setAuthMessage] = useState("");
+  const [isAddingComment, setIsAddingComment] = useState(false);
 
   // hämta alla dokument
   async function load() {
@@ -98,20 +99,46 @@ function App() {
 
     const handleNewComment = (comment) => {
       if (!comment) return;
-      if (!comment.documentId || comment.documentId === editingId) {
+      setItems((prev) =>
+        prev.map((item) => {
+          if (item._id === comment.documentId) {
+            const nextComments = item.comments || [];
+            const exists = nextComments.some((c) => c._id === comment._id);
+            if (exists) return item;
+            return { ...item, comments: [...nextComments, comment] };
+          }
+          return item;
+        })
+      );
+      if (comment.documentId === editingId) {
         setComments((prev) => {
           const exists = prev.some((c) => c._id === comment._id);
-          if (exists) {
-            return prev;
-          }
-          return [...prev, comment];
+          return exists ? prev : [...prev, comment];
         });
       }
     };
 
     const handleRemovedComment = (commentId) => {
       if (!commentId) return;
-      setComments((prev) => prev.filter((comment) => comment._id !== commentId));
+      setItems((prev) =>
+        prev.map((item) => {
+          if (!item.comments) return item;
+          return {
+            ...item,
+            comments: item.comments.filter((comment) => comment._id !== commentId),
+          };
+        })
+      );
+      setComments((prev) => {
+        const filtered = prev.filter((comment) => comment._id !== commentId);
+        if (filtered.length === 0) {
+          setCommentNumber(null);
+          setIsAddingComment(false);
+        } else if (commentNumber && commentNumber > filtered.length) {
+          setCommentNumber(filtered.length);
+        }
+        return filtered;
+      });
     };
 
     socket.on("doc", handleDoc);
@@ -125,7 +152,7 @@ function App() {
       socket.off("comment:new", handleNewComment);
       socket.off("comment:removed", handleRemovedComment);
     };
-  }, [token, editingId]);
+  }, [token, editingId, commentNumber, isAddingComment]);
 
   useEffect(() => {
     if (!token || !editingId) {
@@ -144,13 +171,6 @@ function App() {
 
     loadDocComments();
   }, [token, editingId]);
-
-  useEffect(() => {
-    const totalLines = editDescription ? editDescription.split("\n").length : 0;
-    if (selectedLine && selectedLine > totalLines) {
-      setSelectedLine(null);
-    }
-  }, [editDescription, selectedLine]);
 
   // skapa ny dokument
   async function onCreate(e) {
@@ -172,8 +192,9 @@ function App() {
     setEditingId(item._id);
     setEditTitle(item.title || "");
     setEditDescription(item.description || "");
-    setSelectedLine(null);
+    setCommentNumber(null);
     setNewComment("");
+    setIsAddingComment(false);
     socket.emit("create", item._id);
   }
 
@@ -184,8 +205,9 @@ function App() {
     setEditTitle("");
     setEditDescription("");
     setComments([]);
-    setSelectedLine(null);
+    setCommentNumber(null);
     setNewComment("");
+    setIsAddingComment(false);
   }
 
   // spara redigering
@@ -231,7 +253,7 @@ function App() {
 
   async function onSubmitComment(e) {
     e.preventDefault();
-    if (!editingId || !selectedLine || !newComment.trim() || !token) {
+    if (!editingId || !newComment.trim() || !token) {
       return;
     }
 
@@ -239,13 +261,15 @@ function App() {
       const savedComment = await createComment(
         editingId,
         {
-          line: selectedLine,
+          line: commentNumber || sortedComments.length + 1,
           text: newComment.trim(),
         },
         token
       );
       setComments((prev) => [...prev, savedComment]);
       setNewComment("");
+      setCommentNumber(null);
+      setIsAddingComment(false);
       socket.emit("comment:create", { roomId: editingId, comment: savedComment });
     } catch (e) {
       console.error("Fel vid skapande av kommentar:", e);
@@ -256,7 +280,16 @@ function App() {
     if (!editingId || !token) return;
     try {
       await deleteComment(editingId, commentId, token);
-      setComments((prev) => prev.filter((comment) => comment._id !== commentId));
+      setComments((prev) => {
+        const filtered = prev.filter((comment) => comment._id !== commentId);
+        if (filtered.length === 0) {
+          setCommentNumber(null);
+          setIsAddingComment(false);
+        } else if (commentNumber && commentNumber > filtered.length) {
+          setCommentNumber(filtered.length);
+        }
+        return filtered;
+      });
       socket.emit("comment:delete", { roomId: editingId, commentId });
     } catch (e) {
       console.error("Fel vid borttagning av kommentar:", e);
@@ -309,13 +342,28 @@ function App() {
     localStorage.removeItem("userEmail");
   }
 
-  const descriptionLines = editDescription ? editDescription.split("\n") : [];
   const sortedComments = [...comments].sort((a, b) => {
     if (a.line !== b.line) {
       return a.line - b.line;
     }
     return new Date(a.createdAt) - new Date(b.createdAt);
   });
+
+  const getItemComments = (itemId) => {
+    if (editingId === itemId) {
+      return sortedComments;
+    }
+    const item = items.find((doc) => doc._id === itemId);
+    if (!item || !item.comments) {
+      return [];
+    }
+    return [...item.comments].sort((a, b) => {
+      if (a.line !== b.line) {
+        return a.line - b.line;
+      }
+      return new Date(a.createdAt) - new Date(b.createdAt);
+    });
+  };
 
   if (!token) {
     return (
@@ -406,54 +454,55 @@ function App() {
                   onChange={onEditDescriptionChange}
                   rows={5}
                 />
-                <div className="editor-lines">
-                  <h4>Rader</h4>
-                  <div className="line-list">
-                    {descriptionLines.map((line, index) => (
-                      <button
-                        type="button"
-                        key={`${item._id}-line-${index + 1}`}
-                        className={`line-item ${
-                          selectedLine === index + 1 ? "active" : ""
-                        }`}
-                        onClick={() => setSelectedLine(index + 1)}
-                      >
-                        <span className="line-number">{index + 1}.</span>
-                        <span>{line || "\u00A0"}</span>
-                      </button>
-                    ))}
-                    {descriptionLines.length === 0 && (
-                      <p className="line-placeholder">Inga rader ännu.</p>
-                    )}
-                  </div>
-                </div>
                 <div className="comment-section">
                   <h4>Kommentarer</h4>
-                  {selectedLine && (
+                  {!isAddingComment && (
+                    <button
+                      type="button"
+                      className="comment-add"
+                      onClick={() => {
+                        const nextNumber = sortedComments.length + 1;
+                        setCommentNumber(nextNumber);
+                        setIsAddingComment(true);
+                      }}
+                    >
+                      Skapa kommentar
+                    </button>
+                  )}
+                  {isAddingComment && (
                     <form onSubmit={onSubmitComment} className="comment-form">
-                      <p>Kommenterar rad {selectedLine}</p>
+                      <p>Kommenterar kommentar {commentNumber}</p>
                       <textarea
                         rows={3}
                         value={newComment}
                         onChange={(e) => setNewComment(e.target.value)}
                         placeholder="Skriv din kommentar"
                       />
-                      <button type="submit">Spara kommentar</button>
+                      <div className="comment-form-actions">
+                        <button type="submit">Spara kommentar</button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsAddingComment(false);
+                            setCommentNumber(null);
+                            setNewComment("");
+                          }}
+                        >
+                          Avbryt
+                        </button>
+                      </div>
                     </form>
-                  )}
-                  {!selectedLine && (
-                    <p className="comment-hint">
-                      Välj en rad ovanför för att lägga till en kommentar.
-                    </p>
                   )}
                   <ul className="comment-list">
                     {sortedComments.length === 0 && (
                       <li className="comment-empty">Inga kommentarer i dokumentet.</li>
                     )}
-                    {sortedComments.map((comment) => (
+                    {sortedComments.map((comment, index) => (
                       <li key={comment._id} className="comment-item">
                         <div className="comment-meta">
-                          <span className="comment-line">Rad {comment.line}</span>
+                          <span className="comment-line">
+                            Kommentar {comment.line ?? index + 1}
+                          </span>
                           {comment.authorEmail && (
                             <span className="comment-author">{comment.authorEmail}</span>
                           )}
@@ -488,6 +537,7 @@ function App() {
               <div>
                 <h3>{item.title}</h3>
                 {item.description && <p>{item.description}</p>}
+                <CommentPreview comments={getItemComments(item._id)} />
                 <div className="actions">
                   <button type="button" onClick={() => startEdit(item)}>
                     Redigera
@@ -506,3 +556,40 @@ function App() {
 }
 
 export default App;
+
+function CommentPreview({ comments }) {
+  if (!comments || comments.length === 0) {
+    return (
+      <div className="comment-preview">
+        <strong>Kommentarer</strong>
+        <p className="comment-empty">Inga kommentarer.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="comment-preview">
+      <strong>Kommentarer</strong>
+      <ul className="comment-list preview">
+        {comments.map((comment, index) => (
+          <li key={comment._id} className="comment-item">
+            <div className="comment-meta">
+              <span className="comment-line">
+                Kommentar {comment.line ?? index + 1}
+              </span>
+              {comment.authorEmail && (
+                <span className="comment-author">{comment.authorEmail}</span>
+              )}
+              {comment.createdAt && (
+                <span className="comment-date">
+                  {new Date(comment.createdAt).toLocaleString()}
+                </span>
+              )}
+            </div>
+            <p className="comment-text">{comment.text}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
