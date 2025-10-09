@@ -8,10 +8,16 @@ import {
   getComments,
   createComment,
   deleteComment,
+  registerUser,
+  loginUser,
 } from "./api";
 import { socket } from "./socket";
 
 function App() {
+  const [token, setToken] = useState(() => localStorage.getItem("token") || "");
+  const [currentUser, setCurrentUser] = useState(
+    () => localStorage.getItem("userEmail") || ""
+  );
   const [items, setItems] = useState([]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -21,19 +27,45 @@ function App() {
   const [comments, setComments] = useState([]);
   const [selectedLine, setSelectedLine] = useState(null);
   const [newComment, setNewComment] = useState("");
+  const [authMode, setAuthMode] = useState("login");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authMessage, setAuthMessage] = useState("");
 
   // hämta alla dokument
   async function load() {
+    if (!token) return;
     try {
-      const data = await getItems();
+      const data = await getItems(token);
       setItems(data);
     } catch (e) {
       console.error("Fel vid hämtning:", e);
+      if (e.message?.includes("401") || e.message?.includes("403")) {
+        setAuthMessage("Din session är ogiltig, logga in igen.");
+        handleLogout();
+      }
     }
   }
 
   useEffect(() => {
+    if (token) {
+      localStorage.setItem("token", token);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem("userEmail", currentUser);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (!token) return;
     load();
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
 
     const handleDoc = (data) => {
       if (data._id === editingId) {
@@ -45,8 +77,8 @@ function App() {
         }
       }
 
-      setItems((currentItems) => {
-        return currentItems.map((item) => {
+      setItems((currentItems) =>
+        currentItems.map((item) => {
           if (item._id === data._id) {
             return {
               ...item,
@@ -56,8 +88,8 @@ function App() {
             };
           }
           return item;
-        });
-      });
+        })
+      );
     };
 
     const handleUpdate = () => {
@@ -82,7 +114,6 @@ function App() {
       setComments((prev) => prev.filter((comment) => comment._id !== commentId));
     };
 
-    // lyssna på ändringar från servern
     socket.on("doc", handleDoc);
     socket.on("update", handleUpdate);
     socket.on("comment:new", handleNewComment);
@@ -94,17 +125,17 @@ function App() {
       socket.off("comment:new", handleNewComment);
       socket.off("comment:removed", handleRemovedComment);
     };
-  }, [editingId]);
+  }, [token, editingId]);
 
   useEffect(() => {
-    if (!editingId) {
+    if (!token || !editingId) {
       setComments([]);
       return;
     }
 
     async function loadDocComments() {
       try {
-        const data = await getComments(editingId);
+        const data = await getComments(editingId, token);
         setComments(data);
       } catch (e) {
         console.error("Fel vid hämtning av kommentarer:", e);
@@ -112,7 +143,7 @@ function App() {
     }
 
     loadDocComments();
-  }, [editingId]);
+  }, [token, editingId]);
 
   useEffect(() => {
     const totalLines = editDescription ? editDescription.split("\n").length : 0;
@@ -124,8 +155,9 @@ function App() {
   // skapa ny dokument
   async function onCreate(e) {
     e.preventDefault();
+    if (!token) return;
     try {
-      await createItem({ title, description });
+      await createItem({ title, description }, token);
       setTitle("");
       setDescription("");
       await load();
@@ -158,8 +190,9 @@ function App() {
 
   // spara redigering
   async function saveEdit(id) {
+    if (!token) return;
     try {
-      await updateItem(id, { title: editTitle, description: editDescription });
+      await updateItem(id, { title: editTitle, description: editDescription }, token);
       cancelEdit();
     } catch (e) {
       console.error("Fel vid sparning:", e);
@@ -168,8 +201,9 @@ function App() {
 
   // ta bort dokument
   async function remove(id) {
+    if (!token) return;
     try {
-      await deleteItem(id);
+      await deleteItem(id, token);
       await load();
       socket.emit("update");
     } catch (e) {
@@ -197,15 +231,19 @@ function App() {
 
   async function onSubmitComment(e) {
     e.preventDefault();
-    if (!editingId || !selectedLine || !newComment.trim()) {
+    if (!editingId || !selectedLine || !newComment.trim() || !token) {
       return;
     }
 
     try {
-      const savedComment = await createComment(editingId, {
-        line: selectedLine,
-        text: newComment.trim(),
-      });
+      const savedComment = await createComment(
+        editingId,
+        {
+          line: selectedLine,
+          text: newComment.trim(),
+        },
+        token
+      );
       setComments((prev) => [...prev, savedComment]);
       setNewComment("");
       socket.emit("comment:create", { roomId: editingId, comment: savedComment });
@@ -215,14 +253,60 @@ function App() {
   }
 
   async function onDeleteComment(commentId) {
-    if (!editingId) return;
+    if (!editingId || !token) return;
     try {
-      await deleteComment(editingId, commentId);
+      await deleteComment(editingId, commentId, token);
       setComments((prev) => prev.filter((comment) => comment._id !== commentId));
       socket.emit("comment:delete", { roomId: editingId, commentId });
     } catch (e) {
       console.error("Fel vid borttagning av kommentar:", e);
     }
+  }
+
+  async function handleRegister(e) {
+    e.preventDefault();
+    setAuthMessage("");
+    try {
+      await registerUser({ email: authEmail, password: authPassword });
+      setAuthMessage("Registrering lyckades! Logga in för att fortsätta.");
+      setAuthMode("login");
+      setAuthPassword("");
+    } catch (err) {
+      console.error("Registrering misslyckades:", err);
+      setAuthMessage("Registrering misslyckades, kontrollera uppgifterna.");
+    }
+  }
+
+  async function handleLogin(e) {
+    e.preventDefault();
+    setAuthMessage("");
+    try {
+      const { token: receivedToken } = await loginUser({
+        email: authEmail,
+        password: authPassword,
+      });
+      if (receivedToken) {
+        setToken(receivedToken);
+        setCurrentUser(authEmail);
+        setAuthPassword("");
+        setAuthMessage("Inloggad!");
+        await load();
+      }
+    } catch (err) {
+      console.error("Login misslyckades:", err);
+      setAuthMessage("Fel inloggningsuppgifter.");
+    }
+  }
+
+  function handleLogout() {
+    setToken("");
+    setItems([]);
+    setEditingId(null);
+    setComments([]);
+    setCurrentUser("");
+    setAuthMessage("Du är utloggad.");
+    localStorage.removeItem("token");
+    localStorage.removeItem("userEmail");
   }
 
   const descriptionLines = editDescription ? editDescription.split("\n") : [];
@@ -233,9 +317,64 @@ function App() {
     return new Date(a.createdAt) - new Date(b.createdAt);
   });
 
+  if (!token) {
+    return (
+      <main className="container auth-container">
+        <h1>SSR-Editor av rosa24 och mimr24</h1>
+        <div className="auth-panel">
+          <div className="auth-tabs">
+            <button
+              type="button"
+              className={authMode === "login" ? "active" : ""}
+              onClick={() => setAuthMode("login")}
+            >
+              Logga in
+            </button>
+            <button
+              type="button"
+              className={authMode === "register" ? "active" : ""}
+              onClick={() => setAuthMode("register")}
+            >
+              Registrera
+            </button>
+          </div>
+          <form
+            onSubmit={authMode === "login" ? handleLogin : handleRegister}
+            className="auth-form"
+          >
+            <input
+              type="email"
+              placeholder="E-post"
+              value={authEmail}
+              onChange={(e) => setAuthEmail(e.target.value)}
+            />
+            <input
+              type="password"
+              placeholder="Lösenord"
+              value={authPassword}
+              onChange={(e) => setAuthPassword(e.target.value)}
+            />
+            <button type="submit">
+              {authMode === "login" ? "Logga in" : "Registrera"}
+            </button>
+          </form>
+          {authMessage && <p className="auth-message">{authMessage}</p>}
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="container">
-      <h1>SSR-Editor av rosa24 och mimr24</h1>
+      <div className="header">
+        <h1>SSR-Editor av rosa24 och mimr24</h1>
+        <div className="user-info">
+          {currentUser && <span>Inloggad som {currentUser}</span>}
+          <button type="button" onClick={handleLogout}>
+            Logga ut
+          </button>
+        </div>
+      </div>
 
       <form onSubmit={onCreate} className="new-item">
         <div className="row">
@@ -261,10 +400,7 @@ function App() {
           <li key={item._id} className="card">
             {editingId === item._id ? (
               <div>
-                <input
-                  value={editTitle}
-                  onChange={onEditTitleChange}
-                />
+                <input value={editTitle} onChange={onEditTitleChange} />
                 <textarea
                   value={editDescription}
                   onChange={onEditDescriptionChange}
@@ -350,7 +486,7 @@ function App() {
               </div>
             ) : (
               <div>
-                <h3>{item.title}</h3> 
+                <h3>{item.title}</h3>
                 {item.description && <p>{item.description}</p>}
                 <div className="actions">
                   <button type="button" onClick={() => startEdit(item)}>
