@@ -34,3 +34,27 @@ export async function deleteItem(id) {
   if (!res.ok) throw new Error(`DELETE /api/items/${id} ${res.status}`);
   return res.json();
 }
+
+export async function getComments(itemId) {
+  const res = await fetch(`${API}/api/items/${itemId}/comments`);
+  if (!res.ok) throw new Error(`GET /api/items/${itemId}/comments ${res.status}`);
+  return res.json();
+}
+
+export async function createComment(itemId, body) {
+  const res = await fetch(`${API}/api/items/${itemId}/comments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`POST /api/items/${itemId}/comments ${res.status}`);
+  return res.json();
+}
+
+export async function deleteComment(itemId, commentId) {
+  const res = await fetch(`${API}/api/items/${itemId}/comments/${commentId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error(`DELETE /api/items/${itemId}/comments/${commentId} ${res.status}`);
+  return res.json();
+}
