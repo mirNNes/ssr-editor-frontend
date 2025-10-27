@@ -33,6 +33,24 @@ function App() {
   const [authMessage, setAuthMessage] = useState("");
   const [isAddingComment, setIsAddingComment] = useState(false);
 
+  // läs query-parametrar för registreringslänkar
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const mode = params.get("mode");
+    const emailParam = params.get("email");
+
+    if (mode === "register") {
+      setAuthMode("register");
+    }
+    if (emailParam) {
+      setAuthEmail(emailParam);
+    }
+
+    if (mode || emailParam) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
   // hämta alla dokument
   async function load() {
     if (!token) return;
