@@ -1,6 +1,6 @@
 // API helper
 // VITE_API_URL sets the path to backend API. For local it is VITE_API_URL=http://localhost:3001
-// In prod (GitHub Pages) it is set to our Azure cloud (adding soon)
+// In prod (GitHub Pages) it is set to our Azure cloud
 const API = import.meta.env.VITE_API_URL || "";
 
 function authHeaders(token, extra = {}) {
@@ -62,7 +62,8 @@ export async function getComments(itemId, token) {
   const res = await fetch(`${API}/api/items/${itemId}/comments`, {
     headers: authHeaders(token),
   });
-  if (!res.ok) throw new Error(`GET /api/items/${itemId}/comments ${res.status}`);
+  if (!res.ok)
+    throw new Error(`GET /api/items/${itemId}/comments ${res.status}`);
   return res.json();
 }
 
@@ -72,7 +73,8 @@ export async function createComment(itemId, body, token) {
     headers: authHeaders(token, { "Content-Type": "application/json" }),
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`POST /api/items/${itemId}/comments ${res.status}`);
+  if (!res.ok)
+    throw new Error(`POST /api/items/${itemId}/comments ${res.status}`);
   return res.json();
 }
 
@@ -81,7 +83,10 @@ export async function deleteComment(itemId, commentId, token) {
     method: "DELETE",
     headers: authHeaders(token),
   });
-  if (!res.ok) throw new Error(`DELETE /api/items/${itemId}/comments/${commentId} ${res.status}`);
+  if (!res.ok)
+    throw new Error(
+      `DELETE /api/items/${itemId}/comments/${commentId} ${res.status}`
+    );
   return res.json();
 }
 
