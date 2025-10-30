@@ -48,6 +48,16 @@ export async function deleteItem(id, token) {
   return res.json();
 }
 
+export async function shareItem(id, emails, token) {
+  const res = await fetch(`${API}/api/items/${id}/share`, {
+    method: "POST",
+    headers: authHeaders(token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ emails }),
+  });
+  if (!res.ok) throw new Error(`POST /api/items/${id}/share ${res.status}`);
+  return res.json();
+}
+
 export async function getComments(itemId, token) {
   const res = await fetch(`${API}/api/items/${itemId}/comments`, {
     headers: authHeaders(token),

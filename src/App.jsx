@@ -5,6 +5,7 @@ import {
   createItem,
   updateItem,
   deleteItem,
+  shareItem,
   getComments,
   createComment,
   deleteComment,
@@ -32,6 +33,10 @@ function App() {
   const [authPassword, setAuthPassword] = useState("");
   const [authMessage, setAuthMessage] = useState("");
   const [isAddingComment, setIsAddingComment] = useState(false);
+  const [shareEmails, setShareEmails] = useState("");
+  const [shareMessage, setShareMessage] = useState("");
+  const [sharedWith, setSharedWith] = useState([]);
+  const [isSharing, setIsSharing] = useState(false);
 
   // läs query-parametrar för registreringslänkar
   useEffect(() => {
@@ -103,7 +108,9 @@ function App() {
               ...item,
               title: data.title !== undefined ? data.title : item.title,
               description:
-                data.description !== undefined ? data.description : item.description,
+                data.description !== undefined
+                  ? data.description
+                  : item.description,
             };
           }
           return item;
@@ -143,7 +150,9 @@ function App() {
           if (!item.comments) return item;
           return {
             ...item,
-            comments: item.comments.filter((comment) => comment._id !== commentId),
+            comments: item.comments.filter(
+              (comment) => comment._id !== commentId
+            ),
           };
         })
       );
@@ -175,6 +184,7 @@ function App() {
   useEffect(() => {
     if (!token || !editingId) {
       setComments([]);
+      setSharedWith([]);
       return;
     }
 
@@ -189,6 +199,14 @@ function App() {
 
     loadDocComments();
   }, [token, editingId]);
+
+  useEffect(() => {
+    if (!editingId) return;
+    const current = items.find((item) => item._id === editingId);
+    if (current) {
+      setSharedWith(current.sharedWith || []);
+    }
+  }, [items, editingId]);
 
   // skapa ny dokument
   async function onCreate(e) {
@@ -213,6 +231,9 @@ function App() {
     setCommentNumber(null);
     setNewComment("");
     setIsAddingComment(false);
+    setShareEmails("");
+    setShareMessage("");
+    setSharedWith(item.sharedWith || []);
     socket.emit("create", item._id);
   }
 
@@ -226,13 +247,20 @@ function App() {
     setCommentNumber(null);
     setNewComment("");
     setIsAddingComment(false);
+    setShareEmails("");
+    setShareMessage("");
+    setSharedWith([]);
   }
 
   // spara redigering
   async function saveEdit(id) {
     if (!token) return;
     try {
-      await updateItem(id, { title: editTitle, description: editDescription }, token);
+      await updateItem(
+        id,
+        { title: editTitle, description: editDescription },
+        token
+      );
       cancelEdit();
     } catch (e) {
       console.error("Fel vid sparning:", e);
@@ -269,6 +297,41 @@ function App() {
     }
   }
 
+  async function handleShare(e) {
+    e.preventDefault();
+    if (!editingId || !token) {
+      return;
+    }
+
+    const emails = shareEmails
+      .split(/[,;\s]+/)
+      .map((email) => email.trim())
+      .filter(Boolean);
+
+    if (emails.length === 0) {
+      setShareMessage("Ange minst en e-postadress.");
+      return;
+    }
+
+    setShareMessage("");
+    setIsSharing(true);
+    try {
+      await shareItem(editingId, emails, token);
+      setSharedWith((prev) => {
+        const unique = new Set(prev);
+        emails.forEach((email) => unique.add(email));
+        return Array.from(unique);
+      });
+      setShareEmails("");
+      setShareMessage("Inbjudan skickad.");
+    } catch (err) {
+      console.error("Fel vid delning:", err);
+      setShareMessage("Delning misslyckades, försök igen.");
+    } finally {
+      setIsSharing(false);
+    }
+  }
+
   async function onSubmitComment(e) {
     e.preventDefault();
     if (!editingId || !newComment.trim() || !token) {
@@ -288,7 +351,10 @@ function App() {
       setNewComment("");
       setCommentNumber(null);
       setIsAddingComment(false);
-      socket.emit("comment:create", { roomId: editingId, comment: savedComment });
+      socket.emit("comment:create", {
+        roomId: editingId,
+        comment: savedComment,
+      });
     } catch (e) {
       console.error("Fel vid skapande av kommentar:", e);
     }
@@ -472,6 +538,30 @@ function App() {
                   onChange={onEditDescriptionChange}
                   rows={5}
                 />
+                <div className="share-section">
+                  <h4>Dela dokument</h4>
+                  {sharedWith.length > 0 ? (
+                    <p className="share-info">
+                      Delas med: {sharedWith.join(", ")}
+                    </p>
+                  ) : (
+                    <p className="share-info">Inte delad ännu.</p>
+                  )}
+                  <form onSubmit={handleShare} className="share-form">
+                    <input
+                      type="text"
+                      placeholder="E-post"
+                      value={shareEmails}
+                      onChange={(e) => setShareEmails(e.target.value)}
+                    />
+                    <button type="submit" disabled={isSharing}>
+                      {isSharing ? "Skickar..." : "Dela dokument"}
+                    </button>
+                  </form>
+                  {shareMessage && (
+                    <p className="share-message">{shareMessage}</p>
+                  )}
+                </div>
                 <div className="comment-section">
                   <h4>Kommentarer</h4>
                   {!isAddingComment && (
@@ -513,7 +603,9 @@ function App() {
                   )}
                   <ul className="comment-list">
                     {sortedComments.length === 0 && (
-                      <li className="comment-empty">Inga kommentarer i dokumentet.</li>
+                      <li className="comment-empty">
+                        Inga kommentarer i dokumentet.
+                      </li>
                     )}
                     {sortedComments.map((comment, index) => (
                       <li key={comment._id} className="comment-item">
@@ -522,7 +614,9 @@ function App() {
                             Kommentar {comment.line ?? index + 1}
                           </span>
                           {comment.authorEmail && (
-                            <span className="comment-author">{comment.authorEmail}</span>
+                            <span className="comment-author">
+                              {comment.authorEmail}
+                            </span>
                           )}
                           {comment.createdAt && (
                             <span className="comment-date">
