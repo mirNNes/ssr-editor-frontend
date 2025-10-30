@@ -37,6 +37,8 @@ function App() {
   const [shareMessage, setShareMessage] = useState("");
   const [sharedWith, setSharedWith] = useState([]);
   const [isSharing, setIsSharing] = useState(false);
+  const [remoteCommentDrafts, setRemoteCommentDrafts] = useState({});
+  const [remoteNewDocDrafts, setRemoteNewDocDrafts] = useState({});
 
   // läs query-parametrar för registreringslänkar
   useEffect(() => {
@@ -141,6 +143,17 @@ function App() {
           return exists ? prev : [...prev, comment];
         });
       }
+      if (comment.authorEmail && comment.documentId) {
+        setRemoteCommentDrafts((prev) => {
+          const docDrafts = { ...(prev[comment.documentId] || {}) };
+          delete docDrafts[comment.authorEmail];
+          if (Object.keys(docDrafts).length === 0) {
+            const { [comment.documentId]: _removed, ...rest } = prev;
+            return rest;
+          }
+          return { ...prev, [comment.documentId]: docDrafts };
+        });
+      }
     };
 
     const handleRemovedComment = (commentId) => {
@@ -168,16 +181,52 @@ function App() {
       });
     };
 
+    const handleTypingComment = (draft) => {
+      if (!draft?.documentId || !draft?.authorEmail) {
+        return;
+      }
+      setRemoteCommentDrafts((prev) => {
+        const docDrafts = { ...(prev[draft.documentId] || {}) };
+        if (!draft.text) {
+          delete docDrafts[draft.authorEmail];
+        } else {
+          docDrafts[draft.authorEmail] = draft;
+        }
+        if (Object.keys(docDrafts).length === 0) {
+          const { [draft.documentId]: _removed, ...rest } = prev;
+          return rest;
+        }
+        return { ...prev, [draft.documentId]: docDrafts };
+      });
+    };
+
+    const handleItemTyping = (draft) => {
+      if (!draft?.authorEmail) {
+        return;
+      }
+      setRemoteNewDocDrafts((prev) => {
+        if (!draft.title && !draft.description) {
+          const { [draft.authorEmail]: _removed, ...rest } = prev;
+          return rest;
+        }
+        return { ...prev, [draft.authorEmail]: draft };
+      });
+    };
+
     socket.on("doc", handleDoc);
     socket.on("update", handleUpdate);
     socket.on("comment:new", handleNewComment);
     socket.on("comment:removed", handleRemovedComment);
+    socket.on("comment:typing", handleTypingComment);
+    socket.on("item:typing", handleItemTyping);
 
     return () => {
       socket.off("doc", handleDoc);
       socket.off("update", handleUpdate);
       socket.off("comment:new", handleNewComment);
       socket.off("comment:removed", handleRemovedComment);
+      socket.off("comment:typing", handleTypingComment);
+      socket.off("item:typing", handleItemTyping);
     };
   }, [token, editingId, commentNumber, isAddingComment]);
 
@@ -185,6 +234,7 @@ function App() {
     if (!token || !editingId) {
       setComments([]);
       setSharedWith([]);
+      setRemoteCommentDrafts({});
       return;
     }
 
@@ -216,6 +266,7 @@ function App() {
       await createItem({ title, description }, token);
       setTitle("");
       setDescription("");
+      broadcastNewItemDraft("", "");
       await load();
       socket.emit("update");
     } catch (e) {
@@ -234,11 +285,17 @@ function App() {
     setShareEmails("");
     setShareMessage("");
     setSharedWith(item.sharedWith || []);
+    setRemoteCommentDrafts((prev) => {
+      return prev[item._id] ? { [item._id]: prev[item._id] } : {};
+    });
     socket.emit("create", item._id);
   }
 
   //  avbryt redigering
   function cancelEdit() {
+    if (editingId) {
+      broadcastCommentDraft("", null);
+    }
     load();
     setEditingId(null);
     setEditTitle("");
@@ -250,6 +307,7 @@ function App() {
     setShareEmails("");
     setShareMessage("");
     setSharedWith([]);
+    setRemoteCommentDrafts({});
   }
 
   // spara redigering
@@ -295,6 +353,34 @@ function App() {
     if (editingId) {
       socket.emit("doc", { _id: editingId, description: value });
     }
+  }
+
+  function broadcastNewItemDraft(nextTitle, nextDescription) {
+    if (!currentUser) {
+      return;
+    }
+    socket.emit("item:typing", {
+      authorEmail: currentUser,
+      title: nextTitle,
+      description: nextDescription,
+    });
+  }
+
+  function broadcastCommentDraft(text, lineOverride) {
+    if (!editingId || !currentUser) {
+      return;
+    }
+    const lineValue =
+      lineOverride ?? commentNumber ?? comments.length + 1;
+    socket.emit("comment:typing", {
+      roomId: editingId,
+      draft: {
+        documentId: editingId,
+        authorEmail: currentUser,
+        line: lineValue,
+        text,
+      },
+    });
   }
 
   async function handleShare(e) {
@@ -348,6 +434,7 @@ function App() {
         token
       );
       setComments((prev) => [...prev, savedComment]);
+      broadcastCommentDraft("", commentNumber || savedComment.line);
       setNewComment("");
       setCommentNumber(null);
       setIsAddingComment(false);
@@ -416,6 +503,10 @@ function App() {
   }
 
   function handleLogout() {
+    if (editingId) {
+      broadcastCommentDraft("", null);
+    }
+    broadcastNewItemDraft("", "");
     setToken("");
     setItems([]);
     setEditingId(null);
@@ -424,6 +515,7 @@ function App() {
     setAuthMessage("Du är utloggad.");
     localStorage.removeItem("token");
     localStorage.removeItem("userEmail");
+    setRemoteNewDocDrafts({});
   }
 
   const sortedComments = [...comments].sort((a, b) => {
@@ -432,6 +524,15 @@ function App() {
     }
     return new Date(a.createdAt) - new Date(b.createdAt);
   });
+
+  const draftsForEditing = Object.values(remoteCommentDrafts[editingId] || {});
+
+  const getItemDrafts = (itemId) =>
+    Object.values(remoteCommentDrafts[itemId] || {});
+
+  const remoteNewDraftList = Object.values(remoteNewDocDrafts).filter(
+    (draft) => draft.title || draft.description
+  );
 
   const getItemComments = (itemId) => {
     if (editingId === itemId) {
@@ -509,35 +610,107 @@ function App() {
       </div>
 
       <form onSubmit={onCreate} className="new-item">
-        <div className="row">
-          <input
-            placeholder="Titel"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
-        </div>
-        <div className="row">
-          <textarea
-            placeholder="Fritext"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={3}
-          />
+        <div className="edit-layout">
+          <div className="edit-form">
+            <label htmlFor="new-title">Titel</label>
+            <input
+              id="new-title"
+              placeholder="Titel"
+              value={title}
+              onChange={(e) => {
+                const value = e.target.value;
+                setTitle(value);
+                broadcastNewItemDraft(value, description);
+              }}
+            />
+            <label htmlFor="new-description">Fritext</label>
+            <textarea
+              id="new-description"
+              placeholder="Fritext"
+              value={description}
+              onChange={(e) => {
+                const value = e.target.value;
+                setDescription(value);
+                broadcastNewItemDraft(title, value);
+              }}
+              rows={3}
+            />
+          </div>
+          <div className="edit-preview">
+            <strong>Förhandsvisning</strong>
+            <div className="preview-card">
+              <h3>{title || "Titel"}</h3>
+              {description ? (
+                <p>{description}</p>
+              ) : (
+                <p className="preview-placeholder">Fritext visas här…</p>
+              )}
+            </div>
+          </div>
         </div>
         <button type="submit">Skapa</button>
       </form>
+
+      {remoteNewDraftList.length > 0 && (
+        <section className="new-draft-section">
+          <strong>Andra skriver på nytt dokument</strong>
+          <ul className="new-draft-list">
+            {remoteNewDraftList.map((draft) => (
+              <li
+                key={`new-draft-${draft.authorEmail}`}
+                className="new-draft-card preview-card"
+              >
+                <div className="draft-meta">
+                  {draft.authorEmail && (
+                    <span className="draft-author">{draft.authorEmail}</span>
+                  )}
+                  <span className="draft-indicator">skriver…</span>
+                </div>
+                <h3>{draft.title || "Titel"}</h3>
+                {draft.description ? (
+                  <p>{draft.description}</p>
+                ) : (
+                  <p className="preview-placeholder">Fritext visas här…</p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <ul className="list">
         {items.map((item) => (
           <li key={item._id} className="card">
             {editingId === item._id ? (
               <div>
-                <input value={editTitle} onChange={onEditTitleChange} />
-                <textarea
-                  value={editDescription}
-                  onChange={onEditDescriptionChange}
-                  rows={5}
-                />
+                <div className="edit-layout">
+                  <div className="edit-form">
+                    <label htmlFor="edit-title">Titel</label>
+                    <input
+                      id="edit-title"
+                      value={editTitle}
+                      onChange={onEditTitleChange}
+                    />
+                    <label htmlFor="edit-description">Fritext</label>
+                    <textarea
+                      id="edit-description"
+                      value={editDescription}
+                      onChange={onEditDescriptionChange}
+                      rows={5}
+                    />
+                  </div>
+                  <div className="edit-preview">
+                    <strong>Förhandsvisning</strong>
+                    <div className="preview-card">
+                      <h3>{editTitle || "Titel"}</h3>
+                      {editDescription ? (
+                        <p>{editDescription}</p>
+                      ) : (
+                        <p className="preview-placeholder">Fritext visas här…</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
                 <div className="share-section">
                   <h4>Dela dokument</h4>
                   {sharedWith.length > 0 ? (
@@ -568,12 +741,13 @@ function App() {
                     <button
                       type="button"
                       className="comment-add"
-                      onClick={() => {
-                        const nextNumber = sortedComments.length + 1;
-                        setCommentNumber(nextNumber);
-                        setIsAddingComment(true);
-                      }}
-                    >
+                  onClick={() => {
+                    const nextNumber = sortedComments.length + 1;
+                    setCommentNumber(nextNumber);
+                    setIsAddingComment(true);
+                    broadcastCommentDraft("", nextNumber);
+                  }}
+                >
                       Skapa kommentar
                     </button>
                   )}
@@ -583,7 +757,11 @@ function App() {
                       <textarea
                         rows={3}
                         value={newComment}
-                        onChange={(e) => setNewComment(e.target.value)}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setNewComment(value);
+                          broadcastCommentDraft(value);
+                        }}
                         placeholder="Skriv din kommentar"
                       />
                       <div className="comment-form-actions">
@@ -591,6 +769,7 @@ function App() {
                         <button
                           type="button"
                           onClick={() => {
+                            broadcastCommentDraft("", null);
                             setIsAddingComment(false);
                             setCommentNumber(null);
                             setNewComment("");
@@ -634,6 +813,24 @@ function App() {
                         </button>
                       </li>
                     ))}
+                    {draftsForEditing.map((draft) => (
+                      <li
+                        key={`draft-${draft.authorEmail}-${draft.line}`}
+                        className="comment-item draft"
+                      >
+                        <div className="comment-meta">
+                          <span className="comment-line">
+                            Kommentar {draft.line}
+                          </span>
+                          {draft.authorEmail && (
+                            <span className="comment-author">
+                              {draft.authorEmail} (skriver…)
+                            </span>
+                          )}
+                        </div>
+                        <p>{draft.text}</p>
+                      </li>
+                    ))}
                   </ul>
                 </div>
                 <div className="actions">
@@ -649,7 +846,10 @@ function App() {
               <div>
                 <h3>{item.title}</h3>
                 {item.description && <p>{item.description}</p>}
-                <CommentPreview comments={getItemComments(item._id)} />
+                <CommentPreview
+                  comments={getItemComments(item._id)}
+                  drafts={getItemDrafts(item._id)}
+                />
                 <div className="actions">
                   <button type="button" onClick={() => startEdit(item)}>
                     Redigera
@@ -669,8 +869,11 @@ function App() {
 
 export default App;
 
-function CommentPreview({ comments }) {
-  if (!comments || comments.length === 0) {
+function CommentPreview({ comments, drafts = [] }) {
+  const hasComments = comments && comments.length > 0;
+  const hasDrafts = drafts && drafts.length > 0;
+
+  if (!hasComments && !hasDrafts) {
     return (
       <div className="comment-preview">
         <strong>Kommentarer</strong>
@@ -683,24 +886,42 @@ function CommentPreview({ comments }) {
     <div className="comment-preview">
       <strong>Kommentarer</strong>
       <ul className="comment-list preview">
-        {comments.map((comment, index) => (
-          <li key={comment._id} className="comment-item">
-            <div className="comment-meta">
-              <span className="comment-line">
-                Kommentar {comment.line ?? index + 1}
-              </span>
-              {comment.authorEmail && (
-                <span className="comment-author">{comment.authorEmail}</span>
-              )}
-              {comment.createdAt && (
-                <span className="comment-date">
-                  {new Date(comment.createdAt).toLocaleString()}
+        {hasComments &&
+          comments.map((comment, index) => (
+            <li key={comment._id} className="comment-item">
+              <div className="comment-meta">
+                <span className="comment-line">
+                  Kommentar {comment.line ?? index + 1}
                 </span>
-              )}
-            </div>
-            <p className="comment-text">{comment.text}</p>
-          </li>
-        ))}
+                {comment.authorEmail && (
+                  <span className="comment-author">{comment.authorEmail}</span>
+                )}
+                {comment.createdAt && (
+                  <span className="comment-date">
+                    {new Date(comment.createdAt).toLocaleString()}
+                  </span>
+                )}
+              </div>
+              <p className="comment-text">{comment.text}</p>
+            </li>
+          ))}
+        {hasDrafts &&
+          drafts.map((draft) => (
+            <li
+              key={`preview-draft-${draft.authorEmail}-${draft.line}`}
+              className="comment-item draft"
+            >
+              <div className="comment-meta">
+                <span className="comment-line">Kommentar {draft.line}</span>
+                {draft.authorEmail && (
+                  <span className="comment-author">
+                    {draft.authorEmail} (skriver…)
+                  </span>
+                )}
+              </div>
+              <p className="comment-text">{draft.text}</p>
+            </li>
+          ))}
       </ul>
     </div>
   );
